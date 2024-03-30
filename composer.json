@@ -1,0 +1,21 @@
+{
+    "name": "mrclnn/format-helper",
+    "description": "provides helpful formatting data-types functions",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Mrclnn\\FormatHelper\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "mrclnn",
+            "email": "mrclnn.2021@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "ext-mbstring": "*",
+        "ext-json": "*"
+    }
+}
