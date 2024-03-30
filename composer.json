@@ -16,6 +16,7 @@
     "minimum-stability": "stable",
     "require": {
         "ext-mbstring": "*",
-        "ext-json": "*"
+        "ext-json": "*",
+        "illuminate/support": "*"
     }
 }

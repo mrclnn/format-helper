@@ -1,11 +1,11 @@
 <?php
 
+use Illuminate\Support\Collection;
+
 class FORMAT
 {
     const MALE = 'male';
     const FEMALE = 'female';
-    const EXCEL_TRUE_RUS = 'ДА';
-    const EXCEL_FALSE_RUS = 'НЕТ';
     /**
      * Принимает $date строку, которая может содержать или timestamp или корректное значение для strtotime
      * Возвращает DateTime или null соответствующие переданному значению
@@ -21,10 +21,17 @@ class FORMAT
             //todo не хватает обработки неверного timezone здесь
             if(is_numeric($date)) return new DateTime(date('Y-m-d H:i:s', (int)$date), new DateTimeZone($timezone ?? 'Europe/Moscow'));
             if(strtotime($date)) return new DateTime($date, new DateTimeZone($timezone ?? 'Europe/Moscow'));
-        } catch (Throwable $e){
+        } catch (\Throwable $e){
             return null;
         }
         return null;
+    }
+
+    public static function iterableToArray(iterable $iterable): array
+    {
+        $array = [];
+        array_push($array, ...$iterable);
+        return $array;
     }
 
     /**
@@ -262,65 +269,67 @@ class FORMAT
     {
         yield from [];
     }
-
-    private static function iterableToArray(iterable $iterable): array
+    public static function toStringIterable(iterable $iterable): Collection
     {
-        $array = [];
-        array_push($array, ...$iterable);
-        return $array;
+        //todo array_filter вместо filter() коллекции использовается
+        // потому что is_scalar и подобные фукнции принимают только один параметр,
+        // а filter() передаёт еще и ключ после значения
+        return collect(array_filter(collect($iterable)->all(), 'is_string'));
     }
-    public static function toStringIterable(iterable $iterable): array
+    public static function toScalarIterable(iterable $iterable): Collection
     {
-        return array_filter(self::iterableToArray($iterable), 'is_string');
-    }
-    public static function toScalarIterable(iterable $iterable): array
-    {
-        return array_filter(self::iterableToArray($iterable), 'is_scalar');
+        //todo array_filter вместо filter() коллекции использовается
+        // потому что is_scalar и подобные фукнции принимают только один параметр,
+        // а filter() передаёт еще и ключ после значения
+        return collect(array_filter(collect($iterable)->all(), 'is_scalar'));
     }
     public static function isStringIterable(iterable $iterable): bool
     {
-        return count(self::iterableToArray($iterable)) === count(self::toStringIterable($iterable));
+        return collect($iterable)->count() === collect(self::toStringIterable($iterable))->count();
     }
     public static function isScalarIterable(iterable $iterable): bool
     {
-        return count(self::iterableToArray($iterable)) === count(self::toScalarIterable($iterable));
+        return collect($iterable)->count() === collect(self::toScalarIterable($iterable))->count();
     }
     public static function numericArray(array $array): array
     {
+        // мы не можем сделать это через ->filter() коллекции,
+        // потому что filter передает в callable аргумент 2 аргумента,
+        // а is_numeric бросает ошибку если передано более 1 аргумента
         return array_filter($array, 'is_numeric');
     }
     public static function excelBool(?bool $value): string
     {
         if(is_null($value)) return '';
-        return $value ? self::EXCEL_TRUE_RUS : self::EXCEL_FALSE_RUS;
+        return $value ? 'ДА' : 'НЕТ';
     }
 
-//    /**
-//     * Иногда нужно записывать значения амо мультиселекта в ексель.
-//     * В таком случае мы получаем через getCFV значение селекта и пишем все value через запятую
-//     *
-//     * @param mixed $value
-//     * @param string $delimiter
-//     * @return string
-//     */
-//    public static function excelMultiselect($value, string $delimiter = ','): string
-//    {
-//        return collect($value)->implode($delimiter);
-//    }
+    /**
+     * Иногда нужно записывать значения амо мультиселекта в ексель.
+     * В таком случае мы получаем через getCFV значение селекта и пишем все value через запятую
+     *
+     * @param mixed $value
+     * @param string $delimiter
+     * @return string
+     */
+    public static function excelMultiselect($value, string $delimiter = ','): string
+    {
+        return collect($value)->implode($delimiter);
+    }
 
-//    /**
-//     * Иногда нужно записывать значения амо селекта в ексель.
-//     * В таком случае мы получаем через getCFV значение селекта и пишем первое value
-//     * Можно применять этот метод и для мультиселекта, но в таком случае будет взято первое значение,
-//     * а не все через запятую
-//     *
-//     * @param mixed $value
-//     * @return string
-//     */
-//    public static function excelSelect($value): string
-//    {
-//        return collect($value)->first() ?? '';
-//    }
+    /**
+     * Иногда нужно записывать значения амо селекта в ексель.
+     * В таком случае мы получаем через getCFV значение селекта и пишем первое value
+     * Можно применять этот метод и для мультиселекта, но в таком случае будет взято первое значение,
+     * а не все через запятую
+     *
+     * @param mixed $value
+     * @return string
+     */
+    public static function excelSelect($value): string
+    {
+        return collect($value)->first() ?? '';
+    }
 
     /**
      * Функция обратная функции excelBool (на самом деле registryBool имеется ввиду)
@@ -364,7 +373,7 @@ class FORMAT
 //    {
 //        return PHPExcel_Cell::stringFromColumnIndex($index);
 //    }
-
+//
 //    /**
 //     * Принимает строку название колонки ексель
 //     * возвращает ее индекс
@@ -381,6 +390,44 @@ class FORMAT
 //            AmoHelper::emergency("Received wrong excel column: $column, excel error:"."{$e->getMessage()} in file {$e->getFile()} at line {$e->getLine()}");
 //            return 0;
 //        }
+//    }
+
+//    /**
+//     * @param $num
+//     * принимает число, возвращает соответствие этому числу в виде буквенного индекса excel
+//     * 1 => A
+//     * 2 => B
+//     * 27 => AA
+//     * 28 => AB
+//     * 14558 => UMX
+//     * @return string
+//     */
+//    private function getNameFromNumber(int $num) : string
+//    {
+//        $numeric = $num % 26;
+//        $letter = chr(65 + $numeric);
+//        $num2 = intval($num / 26);
+//        if ($num2 > 0) {
+//            return $this->getNameFromNumber($num2 - 1) . $letter;
+//        } else {
+//            return $letter;
+//        }
+//    }
+//
+//    function num2alpha($n)
+//    {
+//        for($r = ""; $n >= 0; $n = intval($n / 26) - 1)
+//            $r = chr($n%26 + 0x41) . $r;
+//        return $r;
+//    }
+//
+//    public static function alpha2num($string)
+//    {
+//        $res = 0;
+//        foreach(array_reverse(str_split($string)) as $i => $l){
+//            $res += pow(25, $i) + (ord($l) - 64);
+//        }
+//        return $res;
 //    }
 
     /**
@@ -420,31 +467,31 @@ class FORMAT
 //        return (bool)preg_replace('/[a-z]|[а-я]|[A-Z]|[А-Я]|\d|\s/iu', '', $string);
     }
 
-//    /**
-//     * Нужно для сравнения имён, например, чтобы "Иван Иванов" и "Иванов Иван Иванович" считались одним именем
-//     * По сути разбиваем оба переданных значения на массивы содержащие элементы имени (разделитель пробел)
-//     * После чего находим схождение массивов и индекс схождения: отношение общих элементов к максимальному набору первоначальных
-//     *
-//     * например:
-//     * сравнение "Иванов Иван Иванович" и " Иван иванов" даст индекс 0.66 (т.е. совпадение 2/3 элементов имени),
-//     * и мы будем считать это одинаковым именем.
-//     *
-//     * важно:
-//     * сравнение "Иванович Иван" и "Иванович Иван Иванов" тоже даст 0.66, и мы будем дуать что это одно имя
-//     * хотя сочетание Имя + Отчество и гораздо менее уникально чем ФИО
-//     *
-//     * @param string $template
-//     * @param string $target
-//     * @return bool
-//     */
-//    public static function isSameNames(string $template, string $target): bool
-//    {
-//        $template = collect(explode(' ', self::name($template)));
-//        $target = collect(explode(' ', self::name($target)));
-//        $intersection = $template->intersect($target);
-//        $intersectionIndex = $intersection->count() / max($template->count(), $target->count());
-//        return $intersectionIndex >= 0.6;
-//    }
+    /**
+     * Нужно для сравнения имён, например, чтобы "Иван Иванов" и "Иванов Иван Иванович" считались одним именем
+     * По сути разбиваем оба переданных значения на массивы содержащие элементы имени (разделитель пробел)
+     * После чего находим схождение массивов и индекс схождения: отношение общих элементов к максимальному набору первоначальных
+     *
+     * например:
+     * сравнение "Иванов Иван Иванович" и " Иван иванов" даст индекс 0.66 (т.е. совпадение 2/3 элементов имени),
+     * и мы будем считать это одинаковым именем.
+     *
+     * важно:
+     * сравнение "Иванович Иван" и "Иванович Иван Иванов" тоже даст 0.66, и мы будем дуать что это одно имя
+     * хотя сочетание Имя + Отчество и гораздо менее уникально чем ФИО
+     *
+     * @param string $template
+     * @param string $target
+     * @return bool
+     */
+    public static function isSameNames(string $template, string $target): bool
+    {
+        $template = collect(explode(' ', self::name($template)));
+        $target = collect(explode(' ', self::name($target)));
+        $intersection = $template->intersect($target);
+        $intersectionIndex = $intersection->count() / max($template->count(), $target->count());
+        return $intersectionIndex >= 0.6;
+    }
 
     /**
      * Приводит произвольное значение в приемлемое для амо типа поля price
@@ -461,88 +508,88 @@ class FORMAT
         return round((float)$price, 2);
     }
 
-//    /**
-//     * Сравнивает адреса по сегментам, считает что адрес одинаковый если:
-//     * совпадает 60 или более процентов сегментов (для адресов более чем из 3х сегментов).
-//     * совпадает 70 или более процентов сегментов (для адресов менее чем из 3х сегментов). (это на самом деле бессмысленно т.к. тут или 66 или 100)
-//     *
-//     * разные:
-//     * "Москва, Каширское ш., 26к2"
-//     * "Москва, Каширское ш., 65к3"
-//     *
-//     * одинаковые:
-//     * "Краснодарский край, Кореновский р-н, Кореновское городское поселение, Кореновск, Красная ул., 122"
-//     * "Краснодарский край, Кореновск, Красная улица, 122"
-//     *
-//     * @param string|null $address1
-//     * @param string|null $address2
-//     * @return bool
-//     */
-//    public static function compareAddresses(?string $address1, ?string $address2): bool
-//    {
-//        if(empty($address1) || empty($address2)) return false;
-//        $address1 = collect(explode(',', self::prepareAddressToCompare($address1)))->map(function($part){ return trim($part); });
-//        $address2 = collect(explode(',', self::prepareAddressToCompare($address2)))->map(function($part){ return trim($part); });
-//        $intersection = $address1->intersect($address2);
-//        $intersectionIndex = $intersection->count() / max($address1->count(), $address2->count());
-//        // чем меньше составных у адреса тем точнее мы должны сравнивать.
-//        // по сути для трёхсоставных адресов совпадение должно быть 100%-ым
-//        if(max($address1->count(), $address2->count()) < 4) return $intersectionIndex >= 0.7; // если
-//        // без этого условия считаются одинаковыми:
-//        // Московская обл., Орехово-Зуевский г.о., Ликино-Дулёво, ул. Ленина, 4/1
-//        // Московская обл., Орехово-Зуевский г.о., Орехово-Зуево, ул. Ленина, 50А
-//        if(abs($address1->count() - $address2->count()) < 2) return $intersectionIndex >= 0.7;
-//        // точность ниже в основном нужна для ситуаций когда сравниваем адрес где указан полный адрес (много сегментов)
-//        // с адресом где только город улица и дом:
-//        // Краснодарский край, Кореновск, Красная улица, 122
-//        // Краснодарский край, Кореновский р-н, Кореновское городское поселение, Кореновск, Красная ул., 122
-//        return $intersectionIndex >= 0.6;
-//    }
+    /**
+     * Сравнивает адреса по сегментам, считает что адрес одинаковый если:
+     * совпадает 60 или более процентов сегментов (для адресов более чем из 3х сегментов).
+     * совпадает 70 или более процентов сегментов (для адресов менее чем из 3х сегментов). (это на самом деле бессмысленно т.к. тут или 66 или 100)
+     *
+     * разные:
+     * "Москва, Каширское ш., 26к2"
+     * "Москва, Каширское ш., 65к3"
+     *
+     * одинаковые:
+     * "Краснодарский край, Кореновский р-н, Кореновское городское поселение, Кореновск, Красная ул., 122"
+     * "Краснодарский край, Кореновск, Красная улица, 122"
+     *
+     * @param string|null $address1
+     * @param string|null $address2
+     * @return bool
+     */
+    public static function compareAddresses(?string $address1, ?string $address2): bool
+    {
+        if(empty($address1) || empty($address2)) return false;
+        $address1 = collect(explode(',', self::prepareAddressToCompare($address1)))->map(function($part){ return trim($part); });
+        $address2 = collect(explode(',', self::prepareAddressToCompare($address2)))->map(function($part){ return trim($part); });
+        $intersection = $address1->intersect($address2);
+        $intersectionIndex = $intersection->count() / max($address1->count(), $address2->count());
+        // чем меньше составных у адреса тем точнее мы должны сравнивать.
+        // по сути для трёхсоставных адресов совпадение должно быть 100%-ым
+        if(max($address1->count(), $address2->count()) < 4) return $intersectionIndex >= 0.7; // если
+        // без этого условия считаются одинаковыми:
+        // Московская обл., Орехово-Зуевский г.о., Ликино-Дулёво, ул. Ленина, 4/1
+        // Московская обл., Орехово-Зуевский г.о., Орехово-Зуево, ул. Ленина, 50А
+        if(abs($address1->count() - $address2->count()) < 2) return $intersectionIndex >= 0.7;
+        // точность ниже в основном нужна для ситуаций когда сравниваем адрес где указан полный адрес (много сегментов)
+        // с адресом где только город улица и дом:
+        // Краснодарский край, Кореновск, Красная улица, 122
+        // Краснодарский край, Кореновский р-н, Кореновское городское поселение, Кореновск, Красная ул., 122
+        return $intersectionIndex >= 0.6;
+    }
 
-//    /**
-//     * Приводит строку с адресом к единому виду:
-//     *
-//     * Московская область, Орехово-Зуевский городской округ, Ликино-Дулёво, улица Ленина, 4/1
-//     * => московская обл, орехово-зуевский го, ликино-дулeво, ул ленина, 4/1
-//     *
-//     * Московская обл., Орехово-Зуевский г.о., Ликино-Дулёво, ул. Ленина, 4/1
-//     * => московская обл, орехово-зуевский го, ликино-дулeво, ул ленина, 4/1
-//     *
-//     * @param string $address
-//     * @return string
-//     */
-//    private static function prepareAddressToCompare(string $address): string
-//    {
-//        // замена будет производится в порядке значение => ключ
-//        // т.к. например "ул" может быть в составе другого слова ("переУЛок")
-//        $reductions = collect([
-//            'улица' => 'ул',
-//            'проспект' => 'пр-т',
-//            'область' => 'обл',
-//            'автономный округ' => 'ао',
-//            'административный округ' => 'ао',
-//            'район' => 'р-н',
-//            'проезд' => 'пр',
-//            'городской округ' => 'го',
-//            'микрорайон' => 'мкр-н',
-//            'бульвар' => 'б-р',
-//            'переулок' => 'пер',
-//            'площадь' => 'пл',
-//            'дачный поселок' => 'дп',
-//            'шоссе' => 'ш',
-//            'рабочий поселок' => 'рп',
-//        ]);
-//
-//        // убираем лишние пробелы и приводим к нижнему регистру
-//        $address = trim(mb_strtolower($address));
-//        // множественные пробельные символы и переводы строк заменяем на одиночный пробел
-//        $address = preg_replace(['/\s+/', '/\n+/'], ' ', $address);
-//        // все точки удаляем, запятые остаются потому что по ним мы будем разбивать на сегменты адрес в дальнейшем
-//        $address = str_replace('.', '', $address);
-//        // избавляемся от ё
-//        $address = str_replace('ё', 'е', $address);
-//
-//        return str_replace($reductions->keys()->all(), $reductions->values()->all(), $address);
-//    }
+    /**
+     * Приводит строку с адресом к единому виду:
+     *
+     * Московская область, Орехово-Зуевский городской округ, Ликино-Дулёво, улица Ленина, 4/1
+     * => московская обл, орехово-зуевский го, ликино-дулeво, ул ленина, 4/1
+     *
+     * Московская обл., Орехово-Зуевский г.о., Ликино-Дулёво, ул. Ленина, 4/1
+     * => московская обл, орехово-зуевский го, ликино-дулeво, ул ленина, 4/1
+     *
+     * @param string $address
+     * @return string
+     */
+    private static function prepareAddressToCompare(string $address): string
+    {
+        // замена будет производится в порядке значение => ключ
+        // т.к. например "ул" может быть в составе другого слова ("переУЛок")
+        $reductions = collect([
+            'улица' => 'ул',
+            'проспект' => 'пр-т',
+            'область' => 'обл',
+            'автономный округ' => 'ао',
+            'административный округ' => 'ао',
+            'район' => 'р-н',
+            'проезд' => 'пр',
+            'городской округ' => 'го',
+            'микрорайон' => 'мкр-н',
+            'бульвар' => 'б-р',
+            'переулок' => 'пер',
+            'площадь' => 'пл',
+            'дачный поселок' => 'дп',
+            'шоссе' => 'ш',
+            'рабочий поселок' => 'рп',
+        ]);
+
+        // убираем лишние пробелы и приводим к нижнему регистру
+        $address = trim(mb_strtolower($address));
+        // множественные пробельные символы и переводы строк заменяем на одиночный пробел
+        $address = preg_replace(['/\s+/', '/\n+/'], ' ', $address);
+        // все точки удаляем, запятые остаются потому что по ним мы будем разбивать на сегменты адрес в дальнейшем
+        $address = str_replace('.', '', $address);
+        // избавляемся от ё
+        $address = str_replace('ё', 'е', $address);
+
+        return str_replace($reductions->keys()->all(), $reductions->values()->all(), $address);
+    }
 
 }
