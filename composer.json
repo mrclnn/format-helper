@@ -13,7 +13,7 @@
             "email": "mrclnn.2021@gmail.com"
         }
     ],
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "require": {
         "ext-mbstring": "*",
         "ext-json": "*",
